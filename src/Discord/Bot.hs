@@ -39,10 +39,10 @@ constructTellraw :: Text -> Text -> Text -> Text -> Text
 constructTellraw nickname username displayName msg = "tellraw @a [\"\",{\"text\":\"[\",\"color\":\"gray\"},{\"text\":\"Discord\",\"color\":\"blue\"},{\"text\":\"]\",\"color\":\"gray\"},{\"text\":\" <\"},{\"text\":\"" <> nickname <> "\",\"hover_event\":{\"action\":\"show_text\",\"value\":[{\"text\": \"" <> displayName <> " \"}, {\"text\": \"@"<> username <>"\", \"color\": \"gray\"}]}},{\"text\":\"> "<> msg <>"\"}]"
 
 discordEventHandler :: Event -> ReaderT Env DiscordHandler ()
-discordEventHandler event = case event of
-    MessageCreate m -> do
+discordEventHandler (MessageCreate m) 
+    | not $ userIsBot $ messageAuthor m = do
         chatChannel <- asks (chatChannel . discord . config)
-        consoleChannel <- asks (consoleChannel . discord . config)
+        consoleChannel <- fromMaybe "0" <$> asks (consoleChannel . discord . config)
         rh <- asks (rconHost . config)
         rp <- asks (rconPort . config)
         rpswd <- asks (rconPassword . config)
@@ -55,7 +55,16 @@ discordEventHandler event = case event of
                 username
                 displayName
                 (messageContent m)
-    _ -> return ()
+        when (messageChannelId m == DiscordId (Snowflake $ read consoleChannel)) $ do
+            res <- lift $ lift $ runRcon rh rp rpswd $ command $ unpack $ messageContent m
+            let cmd = (!! 0) $ words $ unpack $ messageContent m
+            void $ lift $ restCall $ 
+                R.CreateMessage (DiscordId $ Snowflake $ read consoleChannel) (pack $
+                    case res of
+                        Left e -> "**RCON Error on `" <> cmd <> "`**: " <> show e
+                        Right r -> "**RCON Response on `" <> cmd <> "`**: " <> r)
+    | otherwise = pure ()
+discordEventHandler _ = pure ()
 
 logAction :: ReaderT Env DiscordHandler ()
 logAction = asks logChan >>= (lift . lift . atomically . readTChan) >>= handleLogEvent
@@ -84,17 +93,28 @@ data MessageWebhook = MessageWebhook
     , content :: String
     } deriving (Generic, ToJSON)
 
+sendWebhook :: String -> MessageWebhook -> IO ()
+sendWebhook webhookUrl wbhk = do
+    req <- parseRequest webhookUrl
+        <&> setRequestMethod "POST"
+        . setRequestHeader "Content-Type" ["application/json"]
+        . setRequestBodyLBS (encode wbhk)
+    void $ httpBS req
+
 handleLogEvent :: LE.Event -> ReaderT Env DiscordHandler ()
 handleLogEvent (LE.Line l) = asks (consoleChannel . discord . config) >>= maybe (lift $ pure ()) (\m ->
     void $ lift $ restCall (R.CreateMessage (DiscordId $ Snowflake $ read m) $ pack l))
 handleLogEvent (LE.Chat username message) = do
     webhookUrl <- asks (webhook . discord . config)
     playerHead <- lift $ lift $ getHead username
-    req <- parseRequest webhookUrl
-        <&> setRequestMethod "POST"
-        . setRequestHeader "Content-Type" ["application/json"]
-        . setRequestBodyLBS (encode $ MessageWebhook username playerHead message)
-    _res <- httpBS req
-    pure ()
-
-handleLogEvent _ = pure ()
+    lift $ lift $ sendWebhook webhookUrl $ MessageWebhook username playerHead message
+handleLogEvent (LE.PlayerJoined username _) = do
+    webhookUrl <- asks (webhook . discord . config)
+    serverName <- asks (serverName . discord . config)
+    serverPfp <- asks (serverPfp . discord . config)
+    lift $ lift $ sendWebhook webhookUrl $ MessageWebhook serverName serverPfp $ "**" <> username <> "** joined the game"
+handleLogEvent (LE.PlayerLeft username _) = do
+    webhookUrl <- asks (webhook . discord . config)
+    serverName <- asks (serverName . discord . config)
+    serverPfp <- asks (serverPfp . discord . config)
+    lift $ lift $ sendWebhook webhookUrl $ MessageWebhook serverName serverPfp $ "**" <> username <> "** left the game"

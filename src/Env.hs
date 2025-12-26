@@ -26,6 +26,8 @@ data Discord = Discord
     , webhook :: String
     , chatChannel :: String
     , consoleChannel :: Maybe String
+    , serverName :: String
+    , serverPfp :: String
     } deriving (Show)
 
 parser :: IniParser Config
@@ -37,6 +39,8 @@ parser = do
         webhook <- fieldOf "webhook-url" string
         chatChannel <- fieldOf "chat-channel" string
         consoleChannel <- fieldMbOf "console-channel" string
+        serverName <- fieldOf "server-name" string
+        serverPfp <- fieldOf "server-pfp" string
         pure $ Discord {..}
     pure $ Config {..}
 

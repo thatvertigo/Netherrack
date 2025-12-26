@@ -87,7 +87,7 @@ instance Monad Rcon where
 command :: String -> Rcon String
 command c = RunCommand c pure
 
-data RconError = AuthFailed | UnexpectedIncoming String | ConnectionError String deriving (Show)
+data RconError = AuthFailed | UnexpectedIncoming String | ConnectionError String String deriving (Show)
 
 runRcon :: String -> String -> String -> Rcon a -> IO (Either RconError a)
 runRcon ip port password rcon = runTCPClient ip port $ \s -> do
@@ -106,7 +106,7 @@ runRcon ip port password rcon = runTCPClient ip port $ \s -> do
                     else
                         pure $ Left $ UnexpectedIncoming c 
                 pure $ case tryPacket of
-                    Left _ -> Left $ ConnectionError c
+                    Left x -> Left $ ConnectionError c $ show x
                     Right x -> x
 
 -- from the "network-run" package.
