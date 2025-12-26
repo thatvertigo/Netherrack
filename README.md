@@ -14,7 +14,7 @@ A discord bot for managing vanilla Minecraft servers
     - [ ] Online players in channel description
 - [ ] Discord <-> Console bridge
     - [X] Mirror console to discord
-    - [ ] Chat in bridge channel to send console commands
+    - [X] Chat in bridge channel to send console commands
 - [ ] Online players in status
 - Commands
     - [ ] Server info 
