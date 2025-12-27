@@ -20,6 +20,7 @@ import Data.Maybe (fromMaybe)
 import Data.Aeson (encode)
 import Rcon
 import Data.Aeson.KeyMap (member)
+import Text.Emoji
 
 launchBot :: ReaderT Env IO ()
 launchBot = do
@@ -36,7 +37,12 @@ launchBot = do
     lift $ TIO.putStrLn userFacingError
 
 constructTellraw :: Text -> Text -> Text -> Text -> Text
-constructTellraw nickname username displayName msg = "tellraw @a [\"\",{\"text\":\"[\",\"color\":\"gray\"},{\"text\":\"Discord\",\"color\":\"blue\"},{\"text\":\"]\",\"color\":\"gray\"},{\"text\":\" <\"},{\"text\":\"" <> nickname <> "\",\"hover_event\":{\"action\":\"show_text\",\"value\":[{\"text\": \"" <> displayName <> " \"}, {\"text\": \"@"<> username <>"\", \"color\": \"gray\"}]}},{\"text\":\"> "<> msg <>"\"}]"
+constructTellraw nickname username displayName msg = "tellraw @a [\"\",{\"text\":\"[\",\"color\":\"gray\"},{\"text\":\"Discord\",\"color\":\"blue\"},{\"text\":\"]\",\"color\":\"gray\"},{\"text\":\" <\"},{\"text\":\"" <> nickname <> "\",\"hover_event\":{\"action\":\"show_text\",\"value\":[{\"text\": \"" <> displayName <> " \"}, {\"text\": \"@"<> username <>"\", \"color\": \"gray\"}]}},{\"text\":\"> "<> replaceEmojisDiscord msg <>"\"}]"
+
+replaceEmojisDiscord :: Text -> Text
+replaceEmojisDiscord = replaceEmojis $ const $ \case
+    [] -> ":unknown_emoji:"
+    alias:_ -> ":" <> alias <> ":"
 
 discordEventHandler :: Event -> ReaderT Env DiscordHandler ()
 discordEventHandler (MessageCreate m) 
@@ -56,7 +62,7 @@ discordEventHandler (MessageCreate m)
                 displayName
                 (messageContent m)
         when (messageChannelId m == DiscordId (Snowflake $ read consoleChannel)) $ do
-            res <- lift $ lift $ runRcon rh rp rpswd $ command $ unpack $ messageContent m
+            res <- lift $ lift $ runRcon rh rp rpswd $ command $ unpack $ replaceEmojisDiscord $ messageContent m
             let cmd = (!! 0) $ words $ unpack $ messageContent m
             void $ lift $ restCall $ 
                 R.CreateMessage (DiscordId $ Snowflake $ read consoleChannel) (pack $
