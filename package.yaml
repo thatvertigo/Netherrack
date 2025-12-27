@@ -45,6 +45,7 @@ dependencies:
 - http-conduit
 - lens
 - emojis
+- regex-tdfa
 
 ghc-options:
 - -Wall

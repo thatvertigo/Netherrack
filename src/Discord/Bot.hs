@@ -10,7 +10,7 @@ import Control.Monad.Trans.Reader (ReaderT, runReaderT, asks, ask)
 import Control.Monad.Trans.Class
 import qualified Log.Event as LE
 import Control.Monad
-import Data.Text (pack, Text, unpack)
+import Data.Text (pack, Text, unpack, intercalate)
 import UnliftIO.STM
 import Control.Concurrent (forkIO)
 import Control.Lens
@@ -19,7 +19,6 @@ import Network.HTTP.Simple
 import Data.Maybe (fromMaybe)
 import Data.Aeson (encode)
 import Rcon
-import Data.Aeson.KeyMap (member)
 import Text.Emoji
 
 launchBot :: ReaderT Env IO ()
@@ -29,6 +28,7 @@ launchBot = do
     userFacingError <- lift $ runDiscord $ def
              { discordToken = "Bot " <> pack token
              , discordOnStart = do
+                lift $ putStrLn "Discord bot attached"
                 denv <- ask
                 void $ lift $ forkIO $ forever $ runReaderT (runReaderT logAction e) denv
              , discordOnEvent = (`runReaderT` e) . discordEventHandler
@@ -45,7 +45,7 @@ replaceEmojisDiscord = replaceEmojis $ const $ \case
     alias:_ -> ":" <> alias <> ":"
 
 discordEventHandler :: Event -> ReaderT Env DiscordHandler ()
-discordEventHandler (MessageCreate m) 
+discordEventHandler (MessageCreate m)
     | not $ userIsBot $ messageAuthor m = do
         chatChannel <- asks (chatChannel . discord . config)
         consoleChannel <- fromMaybe "0" <$> asks (consoleChannel . discord . config)
@@ -63,8 +63,8 @@ discordEventHandler (MessageCreate m)
                 (messageContent m)
         when (messageChannelId m == DiscordId (Snowflake $ read consoleChannel)) $ do
             res <- lift $ lift $ runRcon rh rp rpswd $ command $ unpack $ replaceEmojisDiscord $ messageContent m
-            let cmd = (!! 0) $ words $ unpack $ messageContent m
-            void $ lift $ restCall $ 
+            let cmd = head $ words $ unpack $ messageContent m
+            void $ lift $ restCall $
                 R.CreateMessage (DiscordId $ Snowflake $ read consoleChannel) (pack $
                     case res of
                         Left e -> "**RCON Error on `" <> cmd <> "`**: " <> show e
@@ -124,3 +124,8 @@ handleLogEvent (LE.PlayerLeft username _) = do
     serverName <- asks (serverName . discord . config)
     serverPfp <- asks (serverPfp . discord . config)
     lift $ lift $ sendWebhook webhookUrl $ MessageWebhook serverName serverPfp $ "**" <> username <> "** left the game"
+handleLogEvent (LE.PlayerDied _ msg) = do
+    webhookUrl <- asks (webhook . discord . config)
+    serverName <- asks (serverName . discord . config)
+    serverPfp <- asks (serverPfp . discord . config)
+    lift $ lift $ sendWebhook webhookUrl $ MessageWebhook serverName serverPfp $ "**" <> head (words msg) <> "** " <> unwords (tail $ words msg)

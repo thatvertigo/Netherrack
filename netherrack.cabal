@@ -60,6 +60,7 @@ library
     , megaparsec
     , network
     , network-run
+    , regex-tdfa
     , safe-exceptions
     , text
     , transformers
@@ -97,6 +98,7 @@ executable netherrack-exe
     , netherrack
     , network
     , network-run
+    , regex-tdfa
     , safe-exceptions
     , text
     , transformers
@@ -135,6 +137,7 @@ test-suite netherrack-test
     , netherrack
     , network
     , network-run
+    , regex-tdfa
     , safe-exceptions
     , text
     , transformers

@@ -3,14 +3,19 @@ import Log.Parse (LogLine (contents), parseLine)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 import Data.Void
+import Text.Regex.TDFA
+import Control.Monad (guard)
+
+-- Credit https://github.com/destruc7i0n/shulker
+deathMessageRegex :: String
+deathMessageRegex = "^[[:alnum:]_]+ (died|drowned|blew up|fell|burned|froze|starved|suffocated|withered|walked into a cactus|experienced kinetic energy|discovered (the )?floor was lava|tried to swim in lava|hit the ground|didn't want to live|went (up in flames|off with a bang)|walked into (fire|danger)|was (killed|shot|slain|pummeled|pricked|blown up|impaled|squashed|squished|skewered|poked|roasted|burnt|frozen|struck by lightning|fireballed|stung|doomed))"
 
 data Event
     = Line String
     | PlayerJoined String (Double, Double, Double)
     | PlayerLeft String String
     | Chat String String
-    -- | ServerStopped
-    -- | ServerStarted
+    | PlayerDied String String
     deriving (Show)
 
 type Parser = Parsec Void String
@@ -30,6 +35,7 @@ parseContentsToEvent =
       try parseChat
   <|> try parsePlayerJoined
   <|> try parsePlayerLeft
+  <|> try parseDeathMessage
   where
     parsePlayerJoined = do
       name <-
@@ -55,3 +61,10 @@ parseContentsToEvent =
       Chat
         <$> (char '<' *> manyTill anySingle (string "> "))
         <*> many anySingle
+
+    parseDeathMessage :: Parser Event
+    parseDeathMessage = do
+        line <- some anySingle
+        guard (line =~ deathMessageRegex)
+        pure $ PlayerDied (head (words line)) line
+
