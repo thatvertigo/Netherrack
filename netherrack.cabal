@@ -52,6 +52,7 @@ library
     , binary
     , bytestring
     , config-ini
+    , containers
     , discord-haskell
     , emojis
     , fsnotify
@@ -89,6 +90,7 @@ executable netherrack-exe
     , binary
     , bytestring
     , config-ini
+    , containers
     , discord-haskell
     , emojis
     , fsnotify
@@ -128,6 +130,7 @@ test-suite netherrack-test
     , binary
     , bytestring
     , config-ini
+    , containers
     , discord-haskell
     , emojis
     , fsnotify

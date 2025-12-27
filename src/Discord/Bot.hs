@@ -20,6 +20,8 @@ import Data.Maybe (fromMaybe)
 import Data.Aeson (encode)
 import Rcon
 import Text.Emoji
+import qualified Data.Text as T
+import qualified Data.Map as M
 
 launchBot :: ReaderT Env IO ()
 launchBot = do
@@ -36,8 +38,50 @@ launchBot = do
              }
     lift $ TIO.putStrLn userFacingError
 
-constructTellraw :: Text -> Text -> Text -> Text -> Text
-constructTellraw nickname username displayName msg = "tellraw @a [\"\",{\"text\":\"[\",\"color\":\"gray\"},{\"text\":\"Discord\",\"color\":\"blue\"},{\"text\":\"]\",\"color\":\"gray\"},{\"text\":\" <\"},{\"text\":\"" <> nickname <> "\",\"hover_event\":{\"action\":\"show_text\",\"value\":[{\"text\": \"" <> displayName <> " \"}, {\"text\": \"@"<> username <>"\", \"color\": \"gray\"}]}},{\"text\":\"> "<> replaceEmojisDiscord msg <>"\"}]"
+
+constructUserHover :: Text -> Text -> Text
+constructUserHover displayName username = "{\"action\":\"show_text\",\"value\":[{\"text\": \"" <> displayName <> " \"}, {\"text\": \"@"<> username <>"\", \"color\": \"gray\"}]}"
+
+constructAuthorTellraw :: Text -> Text -> Text -> Text
+constructAuthorTellraw nickname username displayName = "{\"text\":\"" <> nickname <> "\",\"hover_event\":" <> constructUserHover displayName username <> "}"
+
+constructMentionTellraw :: Text -> Text -> Text -> Text
+constructMentionTellraw nickname username displayName = "{\"text\":\"@" <> nickname <> "\",\"hover_event\":" <> constructUserHover displayName username <> ", \"color\":\"#7289DA\"}"
+
+toPlainTellraw :: Text -> Text
+toPlainTellraw t = "{\"text\":\"" <> t <> "\"}"
+
+constructMsgTellraw :: [User] -> Text -> Text
+constructMsgTellraw mentions msg = intercalate ",{\"text\":\" \"}," $ map (\s -> fromMaybe (toPlainTellraw s) (M.lookup s mentionsToReplace)) $ splitOut msg (M.keys mentionsToReplace)
+ where
+    splitOut :: Text -> [Text] -> [Text]
+    splitOut input markers = go [] [] (T.words input)
+      where
+        go acc cur [] =
+          reverse $ emit cur acc
+
+        go acc cur (w:ws)
+          | w `elem` markers =
+              go (w : emit cur acc) [] ws
+          | otherwise =
+              go acc (w : cur) ws
+
+        emit [] acc = acc
+        emit ws acc = T.unwords (reverse ws) : acc
+
+    mentionsToReplace :: M.Map Text Text
+    mentionsToReplace = M.fromList $ map (\u -> let
+                usnm = case u of
+                    User { userName = x } -> x
+                udn = fromMaybe usnm (userGlobalName u)
+                ugn = fromMaybe udn (memberNick =<< userMember u)
+            in ("<@" <> pack (show $ userId u) <> ">", constructMentionTellraw ugn usnm udn)) mentions
+
+discordWatermark :: Text
+discordWatermark = "{\"text\":\"[\",\"color\":\"gray\"},{\"text\":\"Discord\",\"color\":\"blue\"},{\"text\":\"]\",\"color\":\"gray\"}"
+
+constructTellraw :: Text -> Text -> Text -> [User] -> Text -> Text
+constructTellraw nickname username displayName mentions msg = "tellraw @a [\"\"," <> discordWatermark <> ",{\"text\":\" <\"}," <> constructAuthorTellraw nickname username displayName <> ",{\"text\": \"> \"},"<> constructMsgTellraw mentions (replaceEmojisDiscord msg) <> "]"
 
 replaceEmojisDiscord :: Text -> Text
 replaceEmojisDiscord = replaceEmojis $ const $ \case
@@ -56,11 +100,14 @@ discordEventHandler (MessageCreate m)
             let username = userName $ messageAuthor m
             let displayName = fromMaybe username $ userGlobalName $ messageAuthor m
             let nickname = fromMaybe displayName $ memberNick =<< messageMember m
-            runRcon rh rp rpswd $ command $ unpack $ constructTellraw
-                nickname
-                username
-                displayName
-                (messageContent m)
+            let tr = constructTellraw
+                    nickname
+                    username
+                    displayName
+                    (messageMentions m)
+                    (messageContent m)
+            putStrLn $ unpack tr
+            runRcon rh rp rpswd $ command $ unpack tr
         when (messageChannelId m == DiscordId (Snowflake $ read consoleChannel)) $ do
             res <- lift $ lift $ runRcon rh rp rpswd $ command $ unpack $ replaceEmojisDiscord $ messageContent m
             let cmd = head $ words $ unpack $ messageContent m

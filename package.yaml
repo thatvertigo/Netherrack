@@ -46,6 +46,7 @@ dependencies:
 - lens
 - emojis
 - regex-tdfa
+- containers
 
 ghc-options:
 - -Wall
