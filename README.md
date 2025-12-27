@@ -9,7 +9,7 @@ A discord bot for managing vanilla Minecraft servers
         - [X] Minecraft -> Discord
             - [X] Webhooks
         - [X] Discord -> Minecraft
-        - [ ] Death messages bridge
+        - [X] Death messages bridge
     - [ ] Private message bridge
     - [ ] Online players in channel description
 - [ ] Discord <-> Console bridge
